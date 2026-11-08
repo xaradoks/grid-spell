@@ -43,4 +43,4 @@ Built in dialogue with an AI assistant (Claude). Concept, design, sound decision
 
 ## License
 
-[выбери: MIT / CC BY-NC / All rights reserved — по желанию]
+[All rights reserved]
