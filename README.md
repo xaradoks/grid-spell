@@ -3,7 +3,7 @@
 **Year:** 2026  
 **Author:** viraible 
 **Medium:** Browser-based interactive audiovisual instrument (HTML5 Canvas, Web Audio API, Vanilla JS)  
-**Live:** [ссылка на GitHub Pages]
+**Live:** https://xaradoks.github.io/grid-spell/
 
 ---
 
