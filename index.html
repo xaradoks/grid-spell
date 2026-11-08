@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Sequencer UI - Final Master</title>
+    <style>
+        :root {
+            --bg: #000000;
+            --surface: #0A0A0A;
+            --line: #FFFFFF;
+            --accent-red: #E23A2E;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+
+        body {
+            background-color: var(--bg);
+            color: var(--line);
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; overflow: hidden;
+        }
+
+        .app-layout { display: flex; flex-direction: column; gap: 24px; }
+
+        .interface-block {
+            display: grid; grid-template-columns: 1fr 70px;
+            border: 1px solid var(--line); width: 900px; height: 550px;
+            background-color: var(--surface); position: relative;
+        }
+
+        .stage {
+            position: relative; border-right: 1px solid var(--line);
+            overflow: hidden; cursor: crosshair;
+        }
+
+        canvas { width: 100%; height: 100%; display: block; }
+
+        .axis-label {
+            position: absolute; font-family: 'Courier New', monospace;
+            font-size: 9px; letter-spacing: 2px; color: var(--line);
+            opacity: 0.8; pointer-events: none; text-transform: uppercase;
+            z-index: 5;
+        }
+        .axis-x { bottom: 4px; right: 8px; }
+        .axis-y { top: 8px; left: 6px; writing-mode: vertical-rl; transform: rotate(180deg); }
+
+        .play-btn {
+            position: absolute; bottom: 0; left: 0; width: 50px; height: 50px;
+            background: var(--bg); border: none; border-top: 1px solid var(--line);
+            border-right: 1px solid var(--line); display: flex; justify-content: center;
+            align-items: center; cursor: pointer; z-index: 10;
+            outline: none;
+        }
+        .play-btn:focus { outline: none; }
+        .play-btn::-moz-focus-inner { border: 0; }
+
+        .play-btn:hover { background: #1A1A1A; }
+
+        .play-btn.active .play-icon {
+            border-top: 8px solid var(--accent-red);
+            border-bottom: 8px solid var(--accent-red);
+            border-left: 12px solid transparent;
+            border-right: 12px solid transparent;
+            width: 0;
+            height: 0;
+            margin-left: 0;
+            background: transparent;
+        }
+
+        .play-icon {
+            width: 0; height: 0; border-top: 8px solid transparent;
+            border-bottom: 8px solid transparent; border-left: 12px solid var(--line);
+            margin-left: 3px;
+            transition: all 0.1s ease;
+        }
+
+        .panel {
+            display: flex; flex-direction: column; justify-content: space-between;
+            padding: 16px 8px;
+        }
+
+        .sliders-group {
+            display: flex; flex-direction: column; justify-content: space-between;
+            align-items: center; height: 100%; gap: 20px;
+        }
+
+        .slider-wrapper {
+            display: flex; justify-content: center; align-items: center;
+            width: 100%; flex: 1; position: relative;
+        }
+
+        .slider-label {
+            position: absolute; right: -5px; top: 50%;
+            transform: translateY(-50%) rotate(-90deg);
+            font-size: 8px; font-family: 'Courier New', monospace;
+            opacity: 0.5; pointer-events: none;
+        }
+
+        input[type=range].vertical-slider {
+            -webkit-appearance: none; appearance: none;
+            width: 180px; height: 6px; background: transparent;
+            outline: none; transform: rotate(-90deg); cursor: pointer;
+        }
+
+        input[type=range].vertical-slider::-webkit-slider-runnable-track {
+            width: 100%; height: 6px; background: var(--bg); border: 1px solid var(--line);
+        }
+        input[type=range].vertical-slider::-moz-range-track {
+            width: 100%; height: 6px; background: var(--bg); border: 1px solid var(--line);
+        }
+
+        input[type=range].vertical-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 12px; height: 12px; background: var(--bg);
+            border: 1px solid var(--line); border-radius: 0; margin-top: -4px;
+        }
+        input[type=range].vertical-slider::-moz-range-thumb {
+            width: 12px; height: 12px; background: var(--bg);
+            border: 1px solid var(--line); border-radius: 0;
+        }
+
+        .panel-actions {
+            display: flex; flex-direction: column; gap: 8px;
+            align-items: center; padding-top: 16px;
+        }
+
+        .action-row { display: flex; gap: 8px; }
+
+        .btn-icon {
+            background: var(--bg); border: 1px solid var(--line);
+            width: 20px; height: 20px; display: flex; justify-content: center;
+            align-items: center; cursor: pointer; padding: 0;
+            outline: none;
+        }
+        .btn-icon:hover { background: #1A1A1A; }
+        .btn-icon:focus { outline: none; }
+        .btn-diamond { transform: rotate(45deg); }
+        .btn-diamond-inner { transform: rotate(-45deg); display: block; width: 100%; height: 100%; }
+
+        .bottom-row {
+            display: flex; align-items: center; justify-content: space-between; width: 100%;
+        }
+
+        .bottom-left { display: flex; align-items: center; gap: 12px; }
+
+        .control-group { display: flex; flex-direction: column; gap: 4px; }
+        .control-label {
+            font-family: 'Courier New', monospace; font-size: 9px;
+            opacity: 0.7; letter-spacing: 1px;
+        }
+        .control-input {
+            background: var(--bg); color: var(--line); border: 1px solid var(--line);
+            font-family: 'Courier New', monospace; font-size: 12px; padding: 4px;
+            outline: none; width: 70px;
+        }
+        .control-select {
+            background: var(--bg); color: var(--line); border: 1px solid var(--line);
+            font-family: 'Courier New', monospace; font-size: 10px; padding: 4px;
+            outline: none; cursor: pointer;
+        }
+
+        .upload-btn {
+            width: 50px; height: 50px; background: var(--bg);
+            border: 1px solid var(--line); display: flex; justify-content: center;
+            align-items: center; cursor: pointer; padding: 6px;
+            outline: none;
+        }
+        .upload-btn:hover { background: #1A1A1A; }
+        .upload-btn:focus { outline: none; }
+
+        .globe-svg {
+            width: 100%; height: 100%;
+            animation: spin 8s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .attenuator-group { display: flex; flex-direction: column; gap: 6px; width: 160px; }
+
+        input[type=range].horizontal-slider {
+            -webkit-appearance: none; appearance: none; width: 100%; height: 6px;
+            background: var(--bg); border: 1px solid var(--line); outline: none; cursor: pointer;
+        }
+        input[type=range].horizontal-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none; width: 10px; height: 12px;
+            background: var(--bg); border: 1px solid var(--line); border-radius: 0; margin-top: -4px;
+        }
+        input[type=range].horizontal-slider::-moz-range-thumb {
+            width: 10px; height: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 0;
+        }
+
+        #image-upload { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="app-layout">
+        <div class="interface-block">
+            <div class="stage" id="stage" aria-label="Main grid area">
+                <input type="file" id="image-upload" accept="image/*">
+                <canvas id="gridCanvas"></canvas>
+                <div class="axis-label axis-y" id="axis-y-label">Y: PITCH</div>
+                <div class="axis-label axis-x">X: TIME (BPM)</div>
+            </div>
+
+            <button class="play-btn" id="btn-play" aria-label="Play">
+                <div class="play-icon"></div>
+            </button>
+
+            <div class="panel" aria-label="Control panel">
+                <div class="sliders-group">
+                    <div class="slider-wrapper"><span class="slider-label">AMP</span><input type="range" class="vertical-slider" id="slider-amp" min="0" max="100" value="0"></div>
+                    <div class="slider-wrapper"><span class="slider-label">FREQ</span><input type="range" class="vertical-slider" id="slider-freq" min="1" max="20" value="5"></div>
+                    <div class="slider-wrapper"><span class="slider-label">SEED</span><input type="range" class="vertical-slider" id="slider-seed" min="0" max="100" value="0"></div>
+                </div>
+
+                <div class="panel-actions">
+                    <div class="action-row">
+                        <button class="btn-icon" id="btn-reset" aria-label="Reset Grid"></button>
+                        <button class="btn-icon btn-diamond" id="btn-random" aria-label="Randomize Grid"><span class="btn-diamond-inner"></span></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bottom-row">
+            <div class="bottom-left">
+                <button class="upload-btn" onclick="document.getElementById('image-upload').click()" aria-label="Load Image">
+                    <svg class="globe-svg" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="square">
+                        <circle cx="12" cy="12" r="10" />
+                        <ellipse cx="12" cy="12" rx="4" ry="10" />
+                        <line x1="2" y1="12" x2="22" y2="12" />
+                        <line x1="12" y1="2" x2="12" y2="22" stroke-dasharray="2 2" />
+                    </svg>
+                </button>
+
+                <div class="control-group"><label class="control-label">BPM</label><input type="number" class="control-input" id="input-bpm" value="120" min="40" max="240"></div>
+                <div class="control-group"><label class="control-label">Y-AXIS</label><select class="control-select" id="select-y-param">
+                    <option value="pitch">Pitch</option>
+                    <option value="spread">Spread</option>
+                    <option value="register">Register</option>
+                    <option value="drift">Drift</option>
+                </select></div>
+                <div class="control-group"><label class="control-label">BOUNDARY WAVE</label><select class="control-select" id="select-waveform"><option value="noise">Noise</option><option value="sine">Sine</option><option value="square">Square</option><option value="saw">Sawtooth</option><option value="triangle">Triangle</option></select></div>
+                <div class="control-group"><label class="control-label">BOUNDARY MODE</label><select class="control-select" id="select-mode"><option value="warp">Warp (Bend)</option><option value="shift">Shift (Slide)</option></select></div>
+            </div>
+
+            <div class="attenuator-group">
+                <div class="control-label">GLOBAL MOD AMOUNT</div>
+                <input type="range" class="horizontal-slider" id="slider-mod-amount" min="0" max="100" value="100">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gridCanvas');
+        const ctx = canvas.getContext('2d');
+        const stage = document.getElementById('stage');
+        const globe = document.querySelector('.globe-svg');
+
+        const cols = 10;
+        const rows = 10;
+        const PURPLE_LINE = '#D000FF';
+
+        let verticals = [];
+        let horizontals = [];
+        for(let i = 0; i <= cols; i++) verticals.push({ amp: 0, freq: 5, seed: Math.random() * 1000 });
+        for(let i = 0; i <= rows; i++) horizontals.push({ amp: 0, freq: 5, seed: Math.random() * 1000 });
+
+        let cellData = [];
+        for(let i = 0; i < cols * rows; i++) {
+            const val = Math.floor(Math.random() * 150) + 50;
+            cellData.push({
+                id: i,
+                color: `rgb(${val},${val},${val})`,
+                sourceC: i % cols,
+                sourceR: Math.floor(i / cols),
+                isEmpty: false,
+                brightness: 0.5,
+                weightedY: 0.5
+            });
+        }
+
+        let loadedImage = null;
+        let activeLine = { type: 'v', index: 1 };
+        let currentWaveform = 'noise';
+        let currentMode = 'warp';
+
+        let isDraggingLine = false;
+        let dragLineType = null;
+        let dragIndex = -1;
+        let startMouseX = 0, startMouseY = 0, startAmp = 0;
+
+        let isDraggingCell = false;
+        let dragStartCell = null;
+        let dragEndX = 0, dragEndY = 0;
+
+        let isPlaying = false;
+        let playheadX = 0;
+
+        let audioCtx = null;
+        let lastPlayedCol = -1;
+        let playStartTime = 0;
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        // baseFreq ниже (300), нижняя граница 40 Гц — бас глубже
+        function playClick(volume = 0.2, brightness = 0.5, pitch = 0, lfoDepth = 0) {
+            if (!audioCtx) return;
+
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+
+            switch (currentWaveform) {
+                case 'sine': osc.type = 'sine'; break;
+                case 'square': osc.type = 'square'; break;
+                case 'saw': osc.type = 'sawtooth'; break;
+                case 'triangle': osc.type = 'triangle'; break;
+                default: osc.type = 'square';
+            }
+
+            const baseFreq = 300;
+            osc.frequency.value = Math.max(40, Math.min(2000, baseFreq + pitch * 600));
+
+            const lp = audioCtx.createBiquadFilter();
+            lp.type = 'lowpass';
+            lp.frequency.value = 1200 + brightness * 2000;
+            lp.Q.value = 0.5;
+
+            const g = audioCtx.createGain();
+            g.gain.setValueAtTime(0, now);
+            g.gain.linearRampToValueAtTime(volume, now + 0.01);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+            osc.connect(lp);
+            lp.connect(g);
+            g.connect(audioCtx.destination);
+
+            if (lfoDepth > 0.01) {
+                const lfo = audioCtx.createOscillator();
+                const lfoGain = audioCtx.createGain();
+                lfo.frequency.value = 8;
+                lfoGain.gain.value = lfoDepth * 200;
+                lfo.connect(lfoGain);
+                lfoGain.connect(osc.frequency);
+                lfo.start(now);
+                lfo.stop(now + 0.1);
+            }
+
+            osc.start(now);
+            osc.stop(now + 0.1);
+        }
+
+        function triggerColumn(col) {
+            const bpm = parseFloat(document.getElementById('input-bpm').value) || 120;
+            const stepMs = 60000 / bpm;
+            const yParam = document.getElementById('select-y-param').value;
+            const modAmount = (parseFloat(document.getElementById('slider-mod-amount').value) || 0) / 100;
+
+            for (let r = 0; r < rows; r++) {
+                const cell = cellData[r * cols + col];
+
+                const isBlack = cell.isEmpty || cell.brightness < 0.15;
+                if (isBlack) continue;
+
+                const deformV = verticals[col].amp / 100;
+                const deformRaw = (Math.abs(verticals[col].amp) + Math.abs(horizontals[r].amp)) / 200;
+                const deform = deformRaw;
+
+                const yPitch = (1 - cell.weightedY) * 2 - 1; // -1..1
+
+                let pitch = 0;
+
+                switch (yParam) {
+                    case 'pitch':
+                        pitch = yPitch * modAmount;
+                        break;
+                    case 'spread':
+                        pitch = yPitch * 2 * modAmount;
+                        break;
+                    case 'register':
+                        // Двунаправленный: 0 = вниз (-1.5), 50 = середина (0), 100 = вверх (+1.5)
+                        pitch = (modAmount - 0.5) * 2 * 1.5;
+                        break;
+                    case 'drift':
+                        const driftTime = performance.now() / 1000;
+                        const drift = Math.sin(driftTime * 0.5 + cell.id * 1.7) * modAmount;
+                        pitch = yPitch * modAmount + drift * 0.5;
+                        break;
+                }
+
+                pitch += deformV;
+
+                const baseDensity = cell.brightness;
+                const density = baseDensity * (1 + deform * 4);
+
+                let clickCount = Math.round(density * 4);
+                if (clickCount < 1) clickCount = 1;
+                if (clickCount > 16) clickCount = 16;
+
+                const vol = Math.min(0.25, (0.03 + density * 0.06));
+
+                for (let k = 0; k < clickCount; k++) {
+                    const t = (k / clickCount) * stepMs;
+                    setTimeout(() => playClick(vol, cell.brightness, pitch, 0), t + r * 4 + Math.random() * 5);
+                }
+            }
+        }
+
+        function playLoop() {
+            if (!isPlaying) return;
+
+            requestAnimationFrame(playLoop);
+
+            const bpm = parseFloat(document.getElementById('input-bpm').value) || 120;
+            const stepMs = 60000 / bpm;
+            const elapsed = performance.now() - playStartTime;
+            const colFloat = (elapsed / stepMs) % cols;
+            const col = Math.floor(colFloat);
+
+            playheadX = colFloat;
+
+            if (col !== lastPlayedCol) {
+                lastPlayedCol = col;
+                triggerColumn(col);
+            }
+
+            drawGrid();
+        }
+
+        function mathNoise(x, seed) {
+            const i = Math.floor(x);
+            const f = x - i;
+            const u = f * f * (3.0 - 2.0 * f);
+            const a = Math.sin(i * 12.9898 + seed) * 43758.5453;
+            const b = Math.sin((i + 1) * 12.9898 + seed) * 43758.5453;
+            return (a - Math.floor(a)) * (1 - u) + (b - Math.floor(b)) * u;
+        }
+
+        function getWaveValue(normalPos, freq, seed) {
+            const phase = normalPos * Math.PI * 2 * freq + seed;
+            switch(currentWaveform) {
+                case 'sine': return Math.sin(phase);
+                case 'square': return Math.sin(phase) >= 0 ? 1 : -1;
+                case 'saw': return 2 * (normalPos * freq - Math.floor(normalPos * freq + 0.5));
+                case 'triangle': return 2 * Math.abs(2 * (normalPos * freq - Math.floor(normalPos * freq + 0.5))) - 1;
+                default:
+                    let val = 0, amp = 0.5, f = 1.0;
+                    for(let i=0; i<3; i++) { val += amp * (mathNoise(normalPos * freq * f, seed) - 0.5) * 2; f *= 2.0; amp *= 0.5; }
+                    return val;
+            }
+        }
+
+        function getShift(type, index, posNormal) {
+            const b = (type === 'v') ? verticals[index] : horizontals[index];
+            return b.amp === 0 ? 0 : getWaveValue(posNormal, b.freq, b.seed) * b.amp;
+        }
+
+        function resizeCanvas() {
+            const parent = canvas.parentElement;
+            const w = parent.clientWidth;
+            const h = parent.clientHeight;
+            if (w > 0 && h > 0) {
+                canvas.width = w;
+                canvas.height = h;
+                drawGrid();
+            }
+        }
+
+        function getVIndex(normX) { return Math.max(0, Math.min(cols, Math.round(normX * cols))); }
+        function getHIndex(normY) { return Math.max(0, Math.min(rows, Math.round(normY * rows))); }
+
+        function getLinePoint(normX, normY) {
+            const baseX = normX * canvas.width;
+            const baseY = normY * canvas.height;
+            const colIndex = getVIndex(normX);
+            const rowIndex = getHIndex(normY);
+            return {
+                x: baseX + getShift('v', colIndex, normY) * 1.5,
+                y: baseY + getShift('h', rowIndex, normX) * 1.5
+            };
+        }
+
+        function drawWarpedImage(c, r, sourceC, sourceR, isEmpty) {
+            const cellW = canvas.width / cols;
+            const cellH = canvas.height / rows;
+
+            if (isEmpty || !loadedImage) {
+                const segments = 4;
+                ctx.beginPath();
+                for (let s = 0; s <= segments; s++) {
+                    const p = getLinePoint((c + s / segments) / cols, r / rows);
+                    if (s === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+                }
+                for (let s = 1; s <= segments; s++) {
+                    const p = getLinePoint((c + 1) / cols, (r + s / segments) / rows);
+                    ctx.lineTo(p.x, p.y);
+                }
+                for (let s = 1; s <= segments; s++) {
+                    const p = getLinePoint((c + 1 - s / segments) / cols, (r + 1) / rows);
+                    ctx.lineTo(p.x, p.y);
+                }
+                for (let s = 1; s <= segments; s++) {
+                    const p = getLinePoint(c / cols, (r + 1 - s / segments) / rows);
+                    ctx.lineTo(p.x, p.y);
+                }
+                ctx.closePath();
+                ctx.fillStyle = '#0A0A0A';
+                ctx.fill();
+                return;
+            }
+
+            const imgRatio = loadedImage.width / loadedImage.height;
+            const cellRatio = cellW / cellH;
+            let sw, sh, sx, sy;
+
+            if (imgRatio > cellRatio) {
+                sh = loadedImage.height; sw = sh * cellRatio;
+                sx = (loadedImage.width - sw) / 2; sy = 0;
+            } else {
+                sw = loadedImage.width; sh = sw / cellRatio;
+                sx = 0; sy = (loadedImage.height - sh) / 2;
+            }
+
+            const cellSx = sx + (sw / cols) * sourceC;
+            const cellSy = sy + (sh / rows) * sourceR;
+            const cellSw = sw / cols;
+            const cellSh = sh / rows;
+
+            const offCanvas = document.createElement('canvas');
+            offCanvas.width = cellW;
+            offCanvas.height = cellH;
+            const offCtx = offCanvas.getContext('2d');
+            offCtx.drawImage(loadedImage, cellSx, cellSy, cellSw, cellSh, 0, 0, cellW, cellH);
+
+            const subDiv = 4;
+            const subW = cellW / subDiv;
+            const subH = cellH / subDiv;
+            const srcW = offCanvas.width / subDiv;
+            const srcH = offCanvas.height / subDiv;
+
+            for (let y = 0; y < subDiv; y++) {
+                for (let x = 0; x < subDiv; x++) {
+                    const nx1 = (c + x / subDiv) / cols;
+                    const ny1 = (r + y / subDiv) / rows;
+                    const nx2 = (c + (x + 1) / subDiv) / cols;
+                    const ny2 = (r + (y + 1) / subDiv) / rows;
+
+                    const p1 = getLinePoint(nx1, ny1);
+                    const p2 = getLinePoint(nx2, ny1);
+                    const p3 = getLinePoint(nx2, ny2);
+                    const p4 = getLinePoint(nx1, ny2);
+
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.moveTo(p1.x, p1.y);
+                    ctx.lineTo(p2.x, p2.y);
+                    ctx.lineTo(p3.x, p3.y);
+                    ctx.lineTo(p4.x, p4.y);
+                    ctx.closePath();
+                    ctx.clip();
+
+                    const dx = (p2.x - p1.x) / subW;
+                    const dy = (p2.y - p1.y) / subW;
+                    const dx2 = (p4.x - p1.x) / subH;
+                    const dy2 = (p4.y - p1.y) / subH;
+
+                    ctx.transform(dx, dy, dx2, dy2, p1.x, p1.y);
+                    ctx.drawImage(offCanvas, x * srcW, y * srcH, srcW, srcH, 0, 0, subW, subH);
+                    ctx.restore();
+                }
+            }
+        }
+
+        function drawGrid() {
+            if (canvas.width === 0 || canvas.height === 0) return;
+
+            ctx.fillStyle = '#0A0A0A';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            const cellW = canvas.width / cols;
+            const cellH = canvas.height / rows;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (isDraggingCell && dragStartCell.c === c && dragStartCell.r === r) continue;
+
+                    const cell = cellData[r * cols + c];
+
+                    if (currentMode === 'warp') {
+                        drawWarpedImage(c, r, cell.sourceC, cell.sourceR, cell.isEmpty);
+                    } else {
+                        const avgShiftX = (getShift('v', c, 0) + getShift('v', c, 0.5) + getShift('v', c, 1)) / 3 * 1.5;
+                        const avgShiftY = (getShift('h', r, 0) + getShift('h', r, 0.5) + getShift('h', r, 1)) / 3 * 1.5;
+
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.rect(0, 0, canvas.width, canvas.height);
+                        ctx.clip();
+
+                        if (!cell.isEmpty && loadedImage) {
+                            const imgRatio = loadedImage.width / loadedImage.height;
+                            const cellRatio = cellW / cellH;
+                            let sw, sh, sx, sy;
+
+                            if (imgRatio > cellRatio) {
+                                sh = loadedImage.height; sw = sh * cellRatio;
+                                sx = (loadedImage.width - sw) / 2; sy = 0;
+                            } else {
+                                sw = loadedImage.width; sh = sw / cellRatio;
+                                sx = 0; sy = (loadedImage.height - sh) / 2;
+                            }
+
+                            const cellSx = sx + (sw / cols) * cell.sourceC;
+                            const cellSy = sy + (sh / rows) * cell.sourceR;
+                            const cellSw = sw / cols;
+                            const cellSh = sh / rows;
+
+                            ctx.drawImage(loadedImage, cellSx, cellSy, cellSw, cellSh, c * cellW + avgShiftX, r * cellH + avgShiftY, cellW, cellH);
+                        } else {
+                            ctx.fillStyle = '#0A0A0A';
+                            ctx.fillRect(c * cellW + avgShiftX, r * cellH + avgShiftY, cellW, cellH);
+                        }
+                        ctx.restore();
+                    }
+                }
+            }
+
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+
+            for (let i = 0; i <= rows; i++) {
+                ctx.strokeStyle = (activeLine.type === 'h' && activeLine.index === i) ? '#E23A2E' : PURPLE_LINE;
+                for (let j = 0; j <= cols * 8; j++) {
+                    const p = getLinePoint(j / (cols * 8), i / rows);
+                    if (j === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+                }
+            }
+
+            for (let j = 0; j <= cols; j++) {
+                ctx.strokeStyle = (activeLine.type === 'v' && activeLine.index === j) ? '#E23A2E' : PURPLE_LINE;
+                for (let i = 0; i <= rows * 8; i++) {
+                    const p = getLinePoint(j / cols, i / (rows * 8));
+                    if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+                }
+            }
+            ctx.stroke();
+
+            if (isPlaying) {
+                const x = playheadX * cellW;
+                ctx.strokeStyle = '#E23A2E';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+
+            if (isDraggingCell) {
+                const dragCell = cellData[dragStartCell.r * cols + dragStartCell.c];
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+                ctx.fillRect(dragStartCell.c * cellW, dragStartCell.r * cellH, cellW, cellH);
+
+                if (!dragCell.isEmpty && loadedImage) {
+                    const imgRatio = loadedImage.width / loadedImage.height;
+                    const cellRatio = cellW / cellH;
+                    let sw, sh, sx, sy;
+
+                    if (imgRatio > cellRatio) {
+                        sh = loadedImage.height; sw = sh * cellRatio;
+                        sx = (loadedImage.width - sw) / 2; sy = 0;
+                    } else {
+                        sw = loadedImage.width; sh = sw / cellRatio;
+                        sx = 0; sy = (loadedImage.height - sh) / 2;
+                    }
+
+                    const cellSx = sx + (sw / cols) * dragCell.sourceC;
+                    const cellSy = sy + (sh / rows) * dragCell.sourceR;
+                    const cellSw = sw / cols;
+                    const cellSh = sh / rows;
+
+                    ctx.drawImage(loadedImage, cellSx, cellSy, cellSw, cellSh, dragEndX - cellW/2, dragEndY - cellH/2, cellW, cellH);
+                } else {
+                    ctx.fillStyle = '#0A0A0A';
+                    ctx.fillRect(dragEndX - cellW/2, dragEndY - cellH/2, cellW, cellH);
+                }
+
+                ctx.strokeStyle = '#FFF'; ctx.lineWidth = 2;
+                ctx.strokeRect(dragEndX - cellW/2, dragEndY - cellH/2, cellW, cellH);
+            }
+        }
+
+        function updateSliders() {
+            const b = (activeLine.type === 'v') ? verticals[activeLine.index] : horizontals[activeLine.index];
+            document.getElementById('slider-amp').value = b.amp;
+            document.getElementById('slider-freq').value = b.freq;
+            document.getElementById('slider-seed').value = b.seed % 100;
+        }
+
+        function updateGlobeSpeed() {
+            const bpm = parseFloat(document.getElementById('input-bpm').value) || 120;
+            const duration = 8 * (120 / bpm);
+            if (globe) globe.style.animationDuration = duration + 's';
+        }
+
+        function computeBrightness() {
+            if (!loadedImage) return;
+
+            const off = document.createElement('canvas');
+            off.width = loadedImage.width;
+            off.height = loadedImage.height;
+            const offCtx = off.getContext('2d');
+            offCtx.drawImage(loadedImage, 0, 0);
+
+            const imgData = offCtx.getImageData(0, 0, off.width, off.height).data;
+
+            const cellW = Math.floor(off.width / cols);
+            const cellH = Math.floor(off.height / rows);
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    let sum = 0, count = 0;
+                    let sumLumY = 0;
+
+                    for (let y = r * cellH; y < (r + 1) * cellH; y += 2) {
+                        const localY = (y - r * cellH) / cellH;
+
+                        for (let x = c * cellW; x < (c + 1) * cellW; x += 2) {
+                            const i = (y * off.width + x) * 4;
+                            const lum = 0.299 * imgData[i] + 0.587 * imgData[i+1] + 0.114 * imgData[i+2];
+                            sum += lum;
+                            count++;
+                            sumLumY += lum * localY;
+                        }
+                    }
+
+                    const idx = r * cols + c;
+                    cellData[idx].brightness = count > 0 ? (sum / count) / 255 : 0.5;
+                    cellData[idx].weightedY = sum > 0 ? (sumLumY / sum) : 0.5;
+                }
+            }
+        }
+
+        stage.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            if (canvas.width === 0 || canvas.height === 0) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            const cellW = canvas.width / cols;
+            const cellH = canvas.height / rows;
+
+            let minDistX = 15;
+            let closestCol = -1;
+
+            for (let i = 0; i <= cols; i++) {
+                const normX = i / cols;
+                const p = getLinePoint(normX, mouseY / canvas.height);
+                const dist = Math.abs(mouseX - p.x);
+                if (dist < minDistX) {
+                    minDistX = dist;
+                    closestCol = i;
+                }
+            }
+
+            if (closestCol !== -1) {
+                activeLine = { type: 'v', index: closestCol };
+                updateSliders(); drawGrid();
+                isDraggingLine = true; dragLineType = 'v'; dragIndex = closestCol;
+                startMouseX = mouseX; startAmp = verticals[closestCol].amp;
+                stage.style.cursor = 'ew-resize';
+                return;
+            }
+
+            let minDistY = 15;
+            let closestRow = -1;
+
+            for (let i = 0; i <= rows; i++) {
+                const normY = i / rows;
+                const p = getLinePoint(mouseX / canvas.width, normY);
+                const dist = Math.abs(mouseY - p.y);
+                if (dist < minDistY) {
+                    minDistY = dist;
+                    closestRow = i;
+                }
+            }
+
+            if (closestRow !== -1) {
+                activeLine = { type: 'h', index: closestRow };
+                updateSliders(); drawGrid();
+                isDraggingLine = true; dragLineType = 'h'; dragIndex = closestRow;
+                startMouseY = mouseY; startAmp = horizontals[closestRow].amp;
+                stage.style.cursor = 'ns-resize';
+                return;
+            }
+
+            const c = Math.floor(mouseX / cellW);
+            const r = Math.floor(mouseY / cellH);
+            if (c >= 0 && c < cols && r >= 0 && r < rows) {
+                isDraggingCell = true;
+                dragStartCell = { c, r };
+                dragEndX = mouseX; dragEndY = mouseY;
+                stage.style.cursor = 'grabbing';
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (e.buttons === 0) {
+                if (isDraggingLine || isDraggingCell) {
+                    isDraggingLine = false;
+                    isDraggingCell = false;
+                    stage.style.cursor = 'crosshair';
+                    drawGrid();
+                }
+                return;
+            }
+
+            if (canvas.width === 0 || canvas.height === 0) return;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            if (isDraggingLine) {
+                if (dragLineType === 'v') verticals[dragIndex].amp = startAmp + (mouseX - startMouseX) * 1.5;
+                else horizontals[dragIndex].amp = startAmp + (mouseY - startMouseY) * 1.5;
+                updateSliders(); drawGrid();
+            }
+            if (isDraggingCell) { dragEndX = mouseX; dragEndY = mouseY; drawGrid(); }
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            if (isDraggingLine) { isDraggingLine = false; }
+
+            if (isDraggingCell) {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                const cellW = canvas.width / cols;
+                const cellH = canvas.height / rows;
+
+                const endC = Math.floor(mouseX / cellW);
+                const endR = Math.floor(mouseY / cellH);
+
+                if (endC >= 0 && endC < cols && endR >= 0 && endR < rows) {
+                    if (endC !== dragStartCell.c || endR !== dragStartCell.r) {
+                        const startIndex = dragStartCell.r * cols + dragStartCell.c;
+                        const endIndex = endR * cols + endC;
+                        const temp = cellData[startIndex];
+                        cellData[startIndex] = cellData[endIndex];
+                        cellData[endIndex] = temp;
+                    }
+                }
+                isDraggingCell = false;
+                dragStartCell = null;
+            }
+            stage.style.cursor = 'crosshair';
+            drawGrid();
+        });
+
+        document.addEventListener('mouseleave', () => {
+            isDraggingLine = false;
+            isDraggingCell = false;
+            stage.style.cursor = 'crosshair';
+            drawGrid();
+        });
+
+        document.getElementById('image-upload').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    loadedImage = img;
+                    for (let i = 0; i < cellData.length; i++) {
+                        cellData[i].sourceC = i % cols;
+                        cellData[i].sourceR = Math.floor(i / cols);
+                    }
+                    computeBrightness();
+                    for (let i = 0; i < cellData.length; i++) {
+                        cellData[i].isEmpty = (cellData[i].brightness < 0.15) || (Math.random() > 0.7);
+                    }
+                    drawGrid();
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        document.getElementById('btn-random').addEventListener('click', () => {
+            for (let i = 0; i < cellData.length; i++) {
+                cellData[i].sourceC = i % cols;
+                cellData[i].sourceR = Math.floor(i / cols);
+                cellData[i].isEmpty = Math.random() > 0.5;
+            }
+            for (let i = cellData.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [cellData[i], cellData[j]] = [cellData[j], cellData[i]];
+            }
+            drawGrid();
+        });
+
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            verticals.forEach(b => b.amp = 0);
+            horizontals.forEach(b => b.amp = 0);
+
+            for (let i = 0; i < cellData.length; i++) {
+                cellData[i].sourceC = i % cols;
+                cellData[i].sourceR = Math.floor(i / cols);
+                cellData[i].isEmpty = false;
+            }
+
+            activeLine = { type: 'v', index: 1 };
+
+            updateSliders();
+            drawGrid();
+        });
+
+        document.getElementById('btn-play').addEventListener('click', () => {
+            isPlaying = !isPlaying;
+            document.getElementById('btn-play').classList.toggle('active', isPlaying);
+            if (isPlaying) {
+                initAudio();
+                playStartTime = performance.now();
+                playheadX = 0;
+                lastPlayedCol = -1;
+                requestAnimationFrame(playLoop);
+            } else {
+                playheadX = 0;
+                drawGrid();
+            }
+        });
+
+        document.getElementById('select-waveform').addEventListener('change', (e) => {
+            currentWaveform = e.target.value;
+            drawGrid();
+        });
+
+        document.getElementById('select-mode').addEventListener('change', (e) => {
+            currentMode = e.target.value;
+            drawGrid();
+        });
+
+        document.getElementById('select-y-param').addEventListener('change', (e) => {
+            document.getElementById('axis-y-label').innerText = `Y: ${e.target.value.toUpperCase()}`;
+        });
+
+        document.getElementById('input-bpm').addEventListener('input', () => {
+            updateGlobeSpeed();
+        });
+
+        document.getElementById('slider-amp').addEventListener('input', (e) => {
+            (activeLine.type === 'v' ? verticals[activeLine.index] : horizontals[activeLine.index]).amp = parseFloat(e.target.value);
+            drawGrid();
+        });
+        document.getElementById('slider-freq').addEventListener('input', (e) => {
+            (activeLine.type === 'v' ? verticals[activeLine.index] : horizontals[activeLine.index]).freq = parseFloat(e.target.value);
+            drawGrid();
+        });
+        document.getElementById('slider-seed').addEventListener('input', (e) => {
+            (activeLine.type === 'v' ? verticals[activeLine.index] : horizontals[activeLine.index]).seed = parseFloat(e.target.value) * 10;
+            drawGrid();
+        });
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function initCanvas() {
+            const parent = canvas.parentElement;
+            const w = parent.clientWidth;
+            const h = parent.clientHeight;
+            if (w > 0 && h > 0) {
+                canvas.width = w;
+                canvas.height = h;
+                drawGrid();
+            } else {
+                requestAnimationFrame(initCanvas);
+            }
+        }
+        requestAnimationFrame(initCanvas);
+
+        updateGlobeSpeed();
+    </script>
+</body>
+</html>
