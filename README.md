@@ -1,7 +1,8 @@
 # Grid Spell
 
 **Year:** 2026  
-**Author:** viraible 
+**Author:** viraible
+
 **Medium:** Browser-based interactive audiovisual instrument (HTML5 Canvas, Web Audio API, Vanilla JS)  
 **Live:** https://xaradoks.github.io/grid-spell/
 
